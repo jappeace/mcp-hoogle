@@ -5,12 +5,10 @@ import Test.Tasty.HUnit
 
 import Data.IORef (IORef, newIORef)
 import Data.Text qualified as Text
-import Hoogle (Database, Target(..), defaultDatabaseLocation, withDatabase)
+import Hoogle (Database, Target(..), defaultDatabaseLocation, withDatabase, hoogle)
 import McpHoogle.Format (formatTarget, formatTargets, stripHtmlTags)
 import McpHoogle.Tools (HoogleTool(..), SearchParams(..), SearchTypeParams(..), LookupModuleParams(..), handleTool)
-import System.Directory (doesFileExist)
-import System.IO.Temp (withSystemTempDirectory)
-import System.Process (callProcess)
+import System.Directory (doesFileExist, createDirectoryIfMissing, getTemporaryDirectory)
 
 main :: IO ()
 main = defaultMain tests
@@ -19,8 +17,28 @@ tests :: TestTree
 tests = testGroup "McpHoogle"
   [ formatTests
   , stripHtmlTests
-  , hoogleSearchTests
+  , withResource acquireDb releaseDb hoogleSearchTests
   ]
+
+-- | Acquire a hoogle database for testing.
+-- Uses the default location if it exists, otherwise generates a fresh one.
+acquireDb :: IO FilePath
+acquireDb = do
+  defaultPath <- defaultDatabaseLocation
+  dbExists <- doesFileExist defaultPath
+  if dbExists
+    then pure defaultPath
+    else do
+      tmpDir <- getTemporaryDirectory
+      let testDbDir = tmpDir <> "/mcp-hoogle-test"
+          testDbPath = testDbDir <> "/test.hoo"
+      createDirectoryIfMissing True testDbDir
+      hoogle ["generate", "--local", "--database=" <> testDbPath]
+      pure testDbPath
+
+-- | No-op cleanup (temp files are fine to leave)
+releaseDb :: FilePath -> IO ()
+releaseDb _ = pure ()
 
 formatTests :: TestTree
 formatTests = testGroup "Format"
@@ -54,45 +72,37 @@ stripHtmlTests = testGroup "stripHtmlTags"
   ]
 
 -- | Integration tests that exercise hoogle search through our handler.
--- These tests require a pre-generated hoogle database and are skipped
--- when the database doesn't exist (e.g. in nix build sandboxes).
-hoogleSearchTests :: TestTree
-hoogleSearchTests = testGroup "Hoogle search integration"
+-- The database path is shared across all tests via withResource.
+hoogleSearchTests :: IO FilePath -> TestTree
+hoogleSearchTests getDbPath = testGroup "Hoogle search integration"
   [ testCase "search for 'map' returns results" $ do
-      withHoogleDb $ \databaseRef -> do
+      dbPath <- getDbPath
+      withHoogleDb dbPath $ \databaseRef -> do
         result <- handleTool databaseRef (Search (SearchParams "map"))
         assertBool "search should return results, not 'No results found'"
           (result /= "No results found.")
         assertBool "search for map should mention 'map' in results"
           (Text.isInfixOf "map" result)
   , testCase "type search '[a] -> Int' returns results" $ do
-      withHoogleDb $ \databaseRef -> do
+      dbPath <- getDbPath
+      withHoogleDb dbPath $ \databaseRef -> do
         result <- handleTool databaseRef (SearchType (SearchTypeParams "[a] -> Int"))
         assertBool "type search should return results"
           (result /= "No results found.")
   , testCase "module lookup 'Data.Map' returns results" $ do
-      withHoogleDb $ \databaseRef -> do
+      dbPath <- getDbPath
+      withHoogleDb dbPath $ \databaseRef -> do
         result <- handleTool databaseRef (LookupModule (LookupModuleParams "Data.Map"))
         assertBool "module lookup should return results"
           (result /= "No results found.")
   ]
 
--- | Run a test with the hoogle database.
--- Uses the default location if it exists, otherwise generates a fresh one.
-withHoogleDb :: (IORef Database -> IO ()) -> IO ()
-withHoogleDb action = do
-  dbPath <- defaultDatabaseLocation
-  dbExists <- doesFileExist dbPath
-  if dbExists
-    then useDb dbPath
-    else withSystemTempDirectory "mcp-hoogle-test" $ \tmpDir -> do
-      let tmpDb = tmpDir <> "/test.hoo"
-      callProcess "hoogle" ["generate", "--local", "--database=" <> tmpDb]
-      useDb tmpDb
-  where
-    useDb path = withDatabase path $ \database -> do
-      databaseRef <- newIORef database
-      action databaseRef
+-- | Load a hoogle database and run an action with it
+withHoogleDb :: FilePath -> (IORef Database -> IO ()) -> IO ()
+withHoogleDb path action =
+  withDatabase path $ \database -> do
+    databaseRef <- newIORef database
+    action databaseRef
 
 -- | Helper to create a Target for testing
 mkTarget :: String -> Maybe (String, String) -> Maybe (String, String) -> Target
