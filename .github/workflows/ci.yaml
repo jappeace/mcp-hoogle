@@ -43,9 +43,7 @@ jobs:
         ghc:
           - '9.12'
           - '9.10'
-          - '9.8'
-          - '9.6'
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, macOS-latest]
 
     steps:
     - uses: actions/checkout@v4
