@@ -1,3 +1,9 @@
+-- | Rendering of Hoogle search results into human-readable text.
+--
+-- Hoogle's 'Target' type contains HTML markup (e.g. @\<s0\>map\<\/s0\>@)
+-- which is meaningless in a plain-text MCP response. This module strips
+-- the HTML and formats each result with its package, module, docs, and URL
+-- so an AI assistant can read them directly.
 module McpHoogle.Format
   ( formatTarget
   , formatTargets
@@ -9,7 +15,10 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Hoogle (Target(..))
 
--- | Format a single Hoogle Target into readable text
+-- | Format a single Hoogle 'Target' into a readable markdown-ish block.
+--
+-- Includes the item signature (HTML-stripped), package name, module name,
+-- documentation excerpt, and a link to the Hackage page.
 formatTarget :: Target -> Text
 formatTarget target = Text.unlines
   [ "## " <> stripHtmlTags (Text.pack (targetItem target))
@@ -25,13 +34,18 @@ formatTarget target = Text.unlines
   , "URL: " <> Text.pack (targetURL target)
   ]
 
--- | Format multiple targets, numbered
+-- | Format a list of targets separated by horizontal rules.
+-- Returns a "No results found." message for an empty list.
 formatTargets :: [Target] -> Text
 formatTargets [] = "No results found."
 formatTargets targets =
   Text.intercalate "\n---\n\n" (map formatTarget targets)
 
--- | Strip HTML tags from a string (simple implementation)
+-- | Strip HTML tags from text, keeping only the text content.
+--
+-- Hoogle wraps function names in @\<s0\>...\<\/s0\>@ spans and uses
+-- other HTML for formatting. This does a single-pass removal of all
+-- angle-bracketed sequences.
 stripHtmlTags :: Text -> Text
 stripHtmlTags = go False
   where

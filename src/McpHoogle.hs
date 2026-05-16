@@ -1,4 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
+-- | Entry point for the MCP server.
+--
+-- This module wires together the Hoogle database, the tool definitions from
+-- "McpHoogle.Tools", and the @mcp-server@ library's stdio transport.
+-- It loads the Hoogle database into an 'IORef' so it can be swapped at
+-- runtime (via the @regenerate_database@ tool), then enters the MCP
+-- request\/response loop reading JSON-RPC from stdin and writing to stdout.
 module McpHoogle
   ( runServer
   , runServerWithDb
@@ -18,7 +25,11 @@ import MCP.Server.Derive (deriveToolHandlerWithDescription)
 import McpHoogle.Tools (HoogleTool(..), handleTool, toolDescriptions)
 import System.Directory (doesFileExist)
 
--- | Run the MCP server using the default Hoogle database location.
+-- | Run the MCP server using the default Hoogle database location
+-- (@~\/.hoogle\/default-haskell-*.hoo@).
+--
+-- Errors immediately if no database is found — the user should run
+-- @mcp-hoogle generate@ first.
 runServer :: IO ()
 runServer = do
   defaultPath <- defaultDatabaseLocation
@@ -28,7 +39,11 @@ runServer = do
     else error $ "Hoogle database not found at: " <> defaultPath
       <> "\nRun 'mcp-hoogle generate' to create it, or pass --database PATH."
 
--- | Run the MCP server with an explicit database path
+-- | Run the MCP server with an explicit database path.
+--
+-- Loads the database, stores it in an 'IORef' (for hot-reload support),
+-- registers the tool handlers via TH-derived dispatch, and enters the
+-- stdio MCP loop. This function blocks until stdin is closed.
 runServerWithDb :: FilePath -> IO ()
 runServerWithDb databasePath =
   withDatabase databasePath $ \database -> do

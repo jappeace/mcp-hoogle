@@ -1,3 +1,11 @@
+-- | MCP tool definitions and their handlers.
+--
+-- Each constructor of 'HoogleTool' becomes an MCP tool that Claude (or any
+-- MCP client) can invoke. The @mcp-server@ library's Template Haskell
+-- derivation turns the ADT into a tool list + dispatcher automatically.
+--
+-- The handler reads from an 'IORef' 'Database' so the database can be
+-- hot-swapped via 'RegenerateDatabase' without restarting the server.
 module McpHoogle.Tools
   ( HoogleTool(..)
   , SearchParams(..)
@@ -16,32 +24,40 @@ import Hoogle (Database, searchDatabase, withDatabase)
 import McpHoogle.Format (formatTargets)
 import System.Process (callProcess)
 
--- | Parameter records for each tool
+-- | Parameters for a general search (name, keyword, or type signature).
 data SearchParams = SearchParams
   { query :: Text
   }
 
+-- | Parameters for a type-signature-specific search.
 data SearchTypeParams = SearchTypeParams
   { typeSignature :: Text
   }
 
+-- | Parameters for a module-name lookup.
 data LookupModuleParams = LookupModuleParams
   { moduleName :: Text
   }
 
+-- | Parameters for database regeneration.
 data RegenerateDatabaseParams = RegenerateDatabaseParams
   { databasePath :: Text
   }
 
--- | MCP tools exposed by this server.
--- Uses nested parameter types to avoid partial record selectors.
+-- | The set of MCP tools this server exposes.
+--
+-- Each constructor maps to one callable tool. The nested parameter records
+-- provide named arguments (avoiding partial record selectors) which the
+-- TH derivation exposes as the tool's input schema.
 data HoogleTool
   = Search SearchParams
   | SearchType SearchTypeParams
   | LookupModule LookupModuleParams
   | RegenerateDatabase RegenerateDatabaseParams
 
--- | Descriptions for TH derivation
+-- | Human-readable descriptions for each tool and its arguments.
+-- Fed to 'deriveToolHandlerWithDescription' so MCP clients know what
+-- each tool does and what arguments to pass.
 toolDescriptions :: [(String, String)]
 toolDescriptions =
   [ ("Search", "Search Hoogle by function name, type signature, or keyword. Returns matching functions with their types, packages, and documentation.")
@@ -54,8 +70,11 @@ toolDescriptions =
   , ("databasePath", "Path to the Hoogle database file to regenerate and reload")
   ]
 
--- | Handle a tool call by searching the Hoogle database.
--- The IORef allows the database to be swapped on regeneration.
+-- | Dispatch a tool call to the appropriate Hoogle operation.
+--
+-- Reads the current database from the 'IORef'. For 'RegenerateDatabase',
+-- shells out to @hoogle generate --local@, reloads the resulting file,
+-- and swaps the 'IORef' contents so subsequent searches use the new data.
 handleTool :: IORef Database -> HoogleTool -> IO Text
 handleTool databaseRef (Search (SearchParams searchQuery)) = do
   database <- readIORef databaseRef
