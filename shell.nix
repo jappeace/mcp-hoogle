@@ -3,7 +3,7 @@
   pkgs ? import ./nix/pkgs.nix {},
 }:
 hpkgs.shellFor {
-  packages = ps: [ ps."template-project" ];
+  packages = ps: [ ps."mcp-hoogle" ];
   withHoogle = false;
 
   buildInputs = [
