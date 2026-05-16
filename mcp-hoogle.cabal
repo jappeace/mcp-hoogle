@@ -3,6 +3,10 @@ cabal-version:      3.0
 name:           mcp-hoogle
 version:        0.1.0
 synopsis:       MCP server exposing Hoogle search over local project dependencies
+description:    An MCP (Model Context Protocol) server that exposes Hoogle search
+                over your project's local Haskell dependencies. Run from within a
+                nix-shell to give AI assistants type-aware search across all packages.
+category:       Development, IDE
 homepage:       https://github.com/jappeace/mcp-hoogle#readme
 bug-reports:    https://github.com/jappeace/mcp-hoogle/issues
 author:         Jappie Klooster
@@ -20,6 +24,11 @@ extra-doc-files:
 source-repository head
   type: git
   location: https://github.com/jappeace/mcp-hoogle
+
+flag werror
+  description: Enable -Werror during development
+  manual: True
+  default: False
 
 common common-options
   default-extensions:
@@ -47,15 +56,18 @@ common common-options
       TemplateHaskell
 
   ghc-options:
-    -O2 -Wall -Werror -Wincomplete-uni-patterns
+    -Wall -Wincomplete-uni-patterns
     -Wincomplete-record-updates -Widentities -Wredundant-constraints
     -Wcpp-undef -fwarn-tabs -Wpartial-fields
     -fdefer-diagnostics -Wunused-packages
     -fenable-th-splice-warnings
     -fno-omit-yields
 
+  if flag(werror)
+    ghc-options: -Werror
+
   build-depends:
-      base >=4.9.1.0 && <4.22.0
+      base >=4.9.1.0 && <4.22
 
   default-language: Haskell2010
 
@@ -68,10 +80,11 @@ library
   hs-source-dirs:
       src
   build-depends:
-      hoogle
-    , mcp-server
-    , text
-    , directory
+      hoogle >=5.0 && <5.1
+    , mcp-server >=0.1 && <0.2
+    , process >=1.6 && <1.7
+    , text >=1.2 && <2.2
+    , directory >=1.3 && <1.4
 
 executable mcp-hoogle
   import: common-options
@@ -80,8 +93,9 @@ executable mcp-hoogle
       app
   build-depends:
       mcp-hoogle
-    , hoogle
-    , process
+    , hoogle >=5.0 && <5.1
+    , optparse-applicative >=0.16 && <0.19
+    , process >=1.6 && <1.7
   ghc-options: -Wno-unused-packages -threaded -rtsopts "-with-rtsopts=-N -M7G -T -Iw10"
 
 test-suite unit
@@ -92,10 +106,9 @@ test-suite unit
   hs-source-dirs:
       test
   build-depends:
-      tasty
-    , tasty-hunit
+      tasty >=1.4 && <1.6
+    , tasty-hunit >=0.10 && <0.11
     , mcp-hoogle
-    , hoogle
-    , text
-    , directory
-    , temporary
+    , hoogle >=5.0 && <5.1
+    , text >=1.2 && <2.2
+    , directory >=1.3 && <1.4

@@ -1,35 +1,64 @@
 module Main where
 
 import McpHoogle (runServer, runServerWithDb)
-import System.Environment (getArgs)
 import System.Process (callProcess)
 import Hoogle (defaultDatabaseLocation)
+import Options.Applicative
+
+data Command
+  = Generate GenerateOpts
+  | Serve ServeOpts
+
+data GenerateOpts = GenerateOpts
+  { generateDatabase :: Maybe FilePath
+  }
+
+data ServeOpts = ServeOpts
+  { serveDatabase :: Maybe FilePath
+  }
+
+commandParser :: Parser Command
+commandParser = subparser
+  ( command "generate" (info (Generate <$> generateOptsParser) (progDesc "Generate Hoogle DB from local GHC packages"))
+  <> command "serve" (info (Serve <$> serveOptsParser) (progDesc "Run MCP server (stdio transport)"))
+  ) <|> (Serve <$> serveOptsParser)
+
+generateOptsParser :: Parser GenerateOpts
+generateOptsParser = GenerateOpts
+  <$> optional (strOption
+    ( long "database"
+    <> short 'd'
+    <> metavar "PATH"
+    <> help "Path to write the Hoogle database (default: ~/.hoogle/)"
+    ))
+
+serveOptsParser :: Parser ServeOpts
+serveOptsParser = ServeOpts
+  <$> optional (strOption
+    ( long "database"
+    <> short 'd'
+    <> metavar "PATH"
+    <> help "Path to the Hoogle database file"
+    ))
+
+opts :: ParserInfo Command
+opts = info (commandParser <**> helper)
+  ( fullDesc
+  <> progDesc "MCP server exposing Hoogle search over local Haskell dependencies"
+  <> header "mcp-hoogle - Hoogle search via Model Context Protocol"
+  )
 
 main :: IO ()
 main = do
-  args <- getArgs
-  case args of
-    ["generate"] -> do
-      databasePath <- defaultDatabaseLocation
+  cmd <- execParser opts
+  case cmd of
+    Generate (GenerateOpts mPath) -> do
+      databasePath <- maybe defaultDatabaseLocation pure mPath
       putStrLn $ "Generating Hoogle database at: " <> databasePath
       putStrLn "Indexing local packages from GHC package database..."
       callProcess "hoogle" ["generate", "--local", "--database=" <> databasePath]
       putStrLn "Done."
-    ["generate", "--database", path] -> do
-      putStrLn $ "Generating Hoogle database at: " <> path
-      putStrLn "Indexing local packages from GHC package database..."
-      callProcess "hoogle" ["generate", "--local", "--database=" <> path]
-      putStrLn "Done."
-    ["serve"] -> runServer
-    ["serve", databasePath] -> runServerWithDb databasePath
-    [] -> runServer
-    [databasePath] -> runServerWithDb databasePath
-    _ -> do
-      putStrLn "Usage: mcp-hoogle [command]"
-      putStrLn ""
-      putStrLn "Commands:"
-      putStrLn "  generate                  Generate Hoogle DB from local GHC packages"
-      putStrLn "  generate --database PATH  Generate Hoogle DB at specific path"
-      putStrLn "  serve [PATH]              Run MCP server (default command)"
-      putStrLn ""
-      putStrLn "Run from within a nix-shell to index project dependencies."
+    Serve (ServeOpts mPath) ->
+      case mPath of
+        Nothing -> runServer
+        Just path -> runServerWithDb path

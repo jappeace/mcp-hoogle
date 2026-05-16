@@ -3,6 +3,8 @@
 }:
 pkgs.haskellPackages.override {
   overrides = hnew: hold: {
-    mcp-hoogle = hnew.callCabal2nix "mcp-hoogle" ../. { };
+    mcp-hoogle = pkgs.haskell.lib.enableCabalFlag
+      (hnew.callCabal2nix "mcp-hoogle" ../. { })
+      "werror";
   };
 }

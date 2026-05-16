@@ -1,5 +1,7 @@
 [![Github actions build status](https://img.shields.io/github/actions/workflow/status/jappeace/mcp-hoogle/ci.yaml?branch=master)](https://github.com/jappeace/mcp-hoogle/actions)
 
+> The type signature is the documentation; everything else is just commentary.
+
 # mcp-hoogle
 
 An MCP (Model Context Protocol) server that exposes Hoogle search over your project's local Haskell dependencies.
@@ -46,11 +48,12 @@ Add to your Claude Code MCP settings:
 
 ## MCP Tools
 
-The server exposes three tools:
+The server exposes four tools:
 
 - **search** — Search by function name, type signature, or keyword
 - **search_type** — Search specifically by type signature (e.g. `[a] -> Int`)
 - **lookup_module** — Browse exports of a module (e.g. `Data.Map`)
+- **regenerate_database** — Re-index packages and reload without restarting the server
 
 ## Building
 

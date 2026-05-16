@@ -5,6 +5,7 @@ module McpHoogle
   )
 where
 
+import Data.IORef (newIORef)
 import Data.Text qualified as Text
 import Hoogle (withDatabase, defaultDatabaseLocation)
 import MCP.Server (runMcpServerStdio)
@@ -18,7 +19,6 @@ import McpHoogle.Tools (HoogleTool(..), handleTool, toolDescriptions)
 import System.Directory (doesFileExist)
 
 -- | Run the MCP server using the default Hoogle database location.
--- Falls back to a provided path if the default doesn't exist.
 runServer :: IO ()
 runServer = do
   defaultPath <- defaultDatabaseLocation
@@ -26,12 +26,13 @@ runServer = do
   if exists
     then runServerWithDb defaultPath
     else error $ "Hoogle database not found at: " <> defaultPath
-      <> "\nRun 'hoogle generate' to create it, or pass a path via command line."
+      <> "\nRun 'mcp-hoogle generate' to create it, or pass --database PATH."
 
 -- | Run the MCP server with an explicit database path
 runServerWithDb :: FilePath -> IO ()
 runServerWithDb databasePath =
   withDatabase databasePath $ \database -> do
+    databaseRef <- newIORef database
     let serverInfo :: McpServerInfo
         serverInfo = McpServerInfo
           { serverName = "mcp-hoogle"
@@ -40,11 +41,12 @@ runServerWithDb databasePath =
               [ "Hoogle search server for Haskell."
               , "Search by function name, type signature, or browse modules."
               , "The database is built from the project's local dependencies."
+              , "Use regenerate_database to reload after switching projects."
               ]
           }
 
         toolHandler :: HoogleTool -> IO Content
-        toolHandler tool = ContentText <$> handleTool database tool
+        toolHandler tool = ContentText <$> handleTool databaseRef tool
 
         handlers :: McpServerHandlers IO
         handlers = McpServerHandlers
