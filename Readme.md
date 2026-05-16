@@ -1,6 +1,6 @@
 [![Github actions build status](https://img.shields.io/github/actions/workflow/status/jappeace/mcp-hoogle/ci.yaml?branch=master)](https://github.com/jappeace/mcp-hoogle/actions)
 
-> The type signature is the documentation; everything else is just commentary.
+> Give me a type signature and I shall move the world.
 
 # mcp-hoogle
 
