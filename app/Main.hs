@@ -1,8 +1,7 @@
 module Main where
 
 import McpHoogle (runServer, runServerWithDb)
-import System.Process (callProcess)
-import Hoogle (defaultDatabaseLocation)
+import Hoogle (defaultDatabaseLocation, hoogle)
 import Options.Applicative
 
 data Command
@@ -56,7 +55,7 @@ main = do
       databasePath <- maybe defaultDatabaseLocation pure mPath
       putStrLn $ "Generating Hoogle database at: " <> databasePath
       putStrLn "Indexing local packages from GHC package database..."
-      callProcess "hoogle" ["generate", "--local", "--database=" <> databasePath]
+      hoogle ["generate", "--local", "--database=" <> databasePath]
       putStrLn "Done."
     Serve (ServeOpts mPath) ->
       case mPath of

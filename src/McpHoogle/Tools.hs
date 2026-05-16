@@ -20,9 +20,8 @@ where
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.IORef (IORef, readIORef, writeIORef)
-import Hoogle (Database, searchDatabase, withDatabase)
+import Hoogle (Database, searchDatabase, withDatabase, hoogle)
 import McpHoogle.Format (formatTargets)
-import System.Process (callProcess)
 
 -- | Parameters for a general search (name, keyword, or type signature).
 data SearchParams = SearchParams
@@ -95,7 +94,7 @@ handleTool databaseRef (LookupModule (LookupModuleParams modName)) = do
   pure (formatTargets finalResults)
 handleTool databaseRef (RegenerateDatabase (RegenerateDatabaseParams path)) = do
   let pathStr = Text.unpack path
-  callProcess "hoogle" ["generate", "--local", "--database=" <> pathStr]
+  hoogle ["generate", "--local", "--database=" <> pathStr]
   withDatabase pathStr $ \newDb -> do
     writeIORef databaseRef newDb
     pure "Database regenerated and reloaded successfully."
