@@ -9,6 +9,8 @@ import Hoogle (Database, Target(..), defaultDatabaseLocation, withDatabase)
 import McpHoogle.Format (formatTarget, formatTargets, stripHtmlTags)
 import McpHoogle.Tools (HoogleTool(..), SearchParams(..), SearchTypeParams(..), LookupModuleParams(..), handleTool)
 import System.Directory (doesFileExist)
+import System.IO.Temp (withSystemTempDirectory)
+import System.Process (callProcess)
 
 main :: IO ()
 main = defaultMain tests
@@ -75,16 +77,22 @@ hoogleSearchTests = testGroup "Hoogle search integration"
           (result /= "No results found.")
   ]
 
--- | Run a test with the hoogle database, skipping if DB doesn't exist
+-- | Run a test with the hoogle database.
+-- Uses the default location if it exists, otherwise generates a fresh one.
 withHoogleDb :: (IORef Database -> IO ()) -> IO ()
 withHoogleDb action = do
   dbPath <- defaultDatabaseLocation
   dbExists <- doesFileExist dbPath
   if dbExists
-    then withDatabase dbPath $ \database -> do
+    then useDb dbPath
+    else withSystemTempDirectory "mcp-hoogle-test" $ \tmpDir -> do
+      let tmpDb = tmpDir <> "/test.hoo"
+      callProcess "hoogle" ["generate", "--local", "--database=" <> tmpDb]
+      useDb tmpDb
+  where
+    useDb path = withDatabase path $ \database -> do
       databaseRef <- newIORef database
       action databaseRef
-    else putStrLn $ "  [SKIPPED] Hoogle database not found at " <> dbPath
 
 -- | Helper to create a Target for testing
 mkTarget :: String -> Maybe (String, String) -> Maybe (String, String) -> Target
