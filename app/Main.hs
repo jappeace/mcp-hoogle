@@ -3,6 +3,8 @@ module Main where
 import McpHoogle (runServer, runServerWithDb)
 import Hoogle (defaultDatabaseLocation, hoogle)
 import Options.Applicative
+import Data.Version (showVersion)
+import Paths_mcp_hoogle (version)
 
 data Command
   = Generate GenerateOpts
@@ -41,7 +43,7 @@ serveOptsParser = ServeOpts
     ))
 
 opts :: ParserInfo Command
-opts = info (commandParser <**> helper)
+opts = info (commandParser <**> helper <**> simpleVersioner ("mcp-hoogle " <> showVersion version))
   ( fullDesc
   <> progDesc "MCP server exposing Hoogle search over local Haskell dependencies"
   <> header "mcp-hoogle - Hoogle search via Model Context Protocol"
