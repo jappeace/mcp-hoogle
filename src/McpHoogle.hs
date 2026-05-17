@@ -16,9 +16,11 @@ module McpHoogle
   )
 where
 
+import Control.Concurrent.STM (TVar, newTVarIO)
 import Data.IORef (IORef, newIORef)
-import Hoogle qualified (Database)
 import Data.Text qualified as Text
+import Data.Version (showVersion)
+import Hoogle qualified (Database)
 import Hoogle (withDatabase, defaultDatabaseLocation)
 import MCP.Server (runMcpServerStdio)
 import MCP.Server.Types
@@ -27,10 +29,9 @@ import MCP.Server.Types
   , Content(..)
   )
 import MCP.Server.Derive (deriveToolHandlerWithDescription)
-import McpHoogle.Tools (HoogleTool(..), handleTool, toolDescriptions)
-import System.Directory (doesFileExist)
-import Data.Version (showVersion)
+import McpHoogle.Tools (HoogleTool(..), RegenState(..), handleTool, toolDescriptions)
 import Paths_mcp_hoogle (version)
+import System.Directory (doesFileExist)
 
 -- | Run the MCP server using the default Hoogle database location
 -- (@~\/.hoogle\/default-haskell-*.hoo@).
@@ -55,7 +56,8 @@ runServerWithDb :: FilePath -> IO ()
 runServerWithDb databasePath =
   withDatabase databasePath $ \database -> do
     databaseRef <- newIORef (Just database)
-    runMcpServerStdio serverInfo (handlers databaseRef)
+    regenStateVar <- newTVarIO RegenIdle
+    runMcpServerStdio serverInfo (handlers databaseRef regenStateVar)
 
 -- | Run the MCP server without a database.
 --
@@ -64,7 +66,8 @@ runServerWithDb databasePath =
 runServerEmpty :: IO ()
 runServerEmpty = do
   databaseRef <- newIORef Nothing
-  runMcpServerStdio serverInfo (handlers databaseRef)
+  regenStateVar <- newTVarIO RegenIdle
+  runMcpServerStdio serverInfo (handlers databaseRef regenStateVar)
 
 -- | Server metadata sent during MCP initialization.
 serverInfo :: McpServerInfo
@@ -96,13 +99,13 @@ serverInfo = McpServerInfo
       ]
   }
 
--- | Build MCP handlers from a database ref.
-handlers :: IORef (Maybe Hoogle.Database) -> McpServerHandlers IO
-handlers databaseRef = McpServerHandlers
+-- | Build MCP handlers from a database ref and regeneration state.
+handlers :: IORef (Maybe Hoogle.Database) -> TVar RegenState -> McpServerHandlers IO
+handlers databaseRef regenStateVar = McpServerHandlers
   { prompts = Nothing
   , resources = Nothing
   , tools = Just $(deriveToolHandlerWithDescription ''HoogleTool 'toolHandler toolDescriptions)
   }
   where
     toolHandler :: HoogleTool -> IO Content
-    toolHandler tool = ContentText <$> handleTool databaseRef tool
+    toolHandler tool = ContentText <$> handleTool databaseRef regenStateVar tool
