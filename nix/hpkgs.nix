@@ -2,20 +2,22 @@
 ,
 }:
 let
-  # mcp-server 0.1.0.17+ supports protocol version negotiation which
-  # is required for Claude Code compatibility (it sends 2024-11-05).
-  mcp-server-src = pkgs.fetchurl {
-    url = "https://hackage.haskell.org/package/mcp-server-0.1.0.19/mcp-server-0.1.0.19.tar.gz";
-    hash = "sha256-riZRTiT6TcESyRRMK5+w9v1xu7okgFHaBxH7ltqScYc=";
+  # Use our fork with the protocol negotiation fix:
+  # https://github.com/drshade/haskell-mcp-server/pull/11
+  # Upstream 0.1.0.19 always responds with "2025-06-18" regardless of what
+  # the client proposes, causing Claude Code (which sends "2024-11-05") to
+  # disconnect and tools never appear.
+  mcp-server-src = pkgs.fetchFromGitHub {
+    owner = "jappeace-sloth";
+    repo = "haskell-mcp-server";
+    rev = "8572533";
+    hash = "sha256-hWJWedD6kXpK2ozgksVO+IanmAJNbzWwOK6XqdnZBw8=";
   };
 in
 pkgs.haskellPackages.override {
   overrides = hnew: hold: {
     mcp-server = pkgs.haskell.lib.dontCheck
-      (hnew.callCabal2nix "mcp-server" (pkgs.runCommand "mcp-server-src" {} ''
-        mkdir $out
-        tar xzf ${mcp-server-src} --strip-components=1 -C $out
-      '') { });
+      (hnew.callCabal2nix "mcp-server" mcp-server-src { });
     mcp-hoogle = pkgs.haskell.lib.enableCabalFlag
       (hnew.callCabal2nix "mcp-hoogle" ../. { })
       "werror";
