@@ -4,15 +4,20 @@
 -- This module wires together the Hoogle database, the tool definitions from
 -- "McpHoogle.Tools", and the @mcp-server@ library's stdio transport.
 -- It loads the Hoogle database into an 'IORef' so it can be swapped at
--- runtime (via the @regenerate_database@ tool), then enters the MCP
--- request\/response loop reading JSON-RPC from stdin and writing to stdout.
+-- runtime (via the @regenerate_database@ or @reload_database@ tools),
+-- then enters the MCP request\/response loop reading JSON-RPC from stdin
+-- and writing to stdout.
+--
+-- The server starts even without an existing database — searches return
+-- "No database loaded" until one is generated or reloaded.
 module McpHoogle
   ( runServer
   , runServerWithDb
   )
 where
 
-import Data.IORef (newIORef)
+import Data.IORef (IORef, newIORef)
+import Hoogle qualified (Database)
 import Data.Text qualified as Text
 import Hoogle (withDatabase, defaultDatabaseLocation)
 import MCP.Server (runMcpServerStdio)
@@ -28,16 +33,16 @@ import System.Directory (doesFileExist)
 -- | Run the MCP server using the default Hoogle database location
 -- (@~\/.hoogle\/default-haskell-*.hoo@).
 --
--- Errors immediately if no database is found — the user should run
--- @mcp-hoogle generate@ first.
+-- If no database exists, the server starts anyway with an empty database
+-- ref — the agent can call @regenerate_database@ or @reload_database@ to
+-- populate it without restarting.
 runServer :: IO ()
 runServer = do
   defaultPath <- defaultDatabaseLocation
   exists <- doesFileExist defaultPath
   if exists
     then runServerWithDb defaultPath
-    else error $ "Hoogle database not found at: " <> defaultPath
-      <> "\nRun 'mcp-hoogle generate' to create it, or pass --database PATH."
+    else runServerEmpty
 
 -- | Run the MCP server with an explicit database path.
 --
@@ -47,46 +52,55 @@ runServer = do
 runServerWithDb :: FilePath -> IO ()
 runServerWithDb databasePath =
   withDatabase databasePath $ \database -> do
-    databaseRef <- newIORef database
-    let serverInfo :: McpServerInfo
-        serverInfo = McpServerInfo
-          { serverName = "mcp-hoogle"
-          , serverVersion = "0.1.0"
-          , serverInstructions = Text.unlines
-              [ "Hoogle search for Haskell types, functions, and modules."
-              , ""
-              , "USE THESE TOOLS INSTEAD OF:"
-              , "- Web searching for Haskell documentation"
-              , "- Running `hoogle` or `mcp-hoogle` CLI commands"
-              , "- Fetching Hackage pages with curl/w3m"
-              , ""
-              , "AVAILABLE TOOLS:"
-              , "- search: Find functions by name, keyword, or type signature (e.g. \"map\", \"[a] -> Int\")"
-              , "- search_type: Search specifically by type signature"
-              , "- lookup_module: Browse all exports of a module (e.g. \"Data.Map\")"
-              , "- regenerate_database: Re-index after entering a different project's nix-shell"
-              , ""
-              , "DATABASE SETUP:"
-              , "If no database exists, run `mcp-hoogle generate` from an"
-              , "environment where `ghc-pkg` is on PATH (so it can discover"
-              , "installed packages). For nix-based projects this means running"
-              , "from inside the project's nix-shell:"
-              , "  nix-shell --run 'mcp-hoogle generate'"
-              , "For cabal/stack projects, just run `mcp-hoogle generate` directly"
-              , "(GHC tools are already on PATH)."
-              , "This only needs to be done once per project. The database persists"
-              , "at ~/.hoogle/ and is reused across sessions."
-              ]
-          }
+    databaseRef <- newIORef (Just database)
+    runMcpServerStdio serverInfo (handlers databaseRef)
 
-        toolHandler :: HoogleTool -> IO Content
-        toolHandler tool = ContentText <$> handleTool databaseRef tool
+-- | Run the MCP server without a database.
+--
+-- The server starts and exposes tools, but searches return "No database
+-- loaded" until the agent calls @regenerate_database@ or @reload_database@.
+runServerEmpty :: IO ()
+runServerEmpty = do
+  databaseRef <- newIORef Nothing
+  runMcpServerStdio serverInfo (handlers databaseRef)
 
-        handlers :: McpServerHandlers IO
-        handlers = McpServerHandlers
-          { prompts = Nothing
-          , resources = Nothing
-          , tools = Just $(deriveToolHandlerWithDescription ''HoogleTool 'toolHandler toolDescriptions)
-          }
+-- | Server metadata sent during MCP initialization.
+serverInfo :: McpServerInfo
+serverInfo = McpServerInfo
+  { serverName = "mcp-hoogle"
+  , serverVersion = "0.1.0"
+  , serverInstructions = Text.unlines
+      [ "Hoogle search for Haskell types, functions, and modules."
+      , ""
+      , "USE THESE TOOLS INSTEAD OF:"
+      , "- Web searching for Haskell documentation"
+      , "- Running `hoogle` or `mcp-hoogle` CLI commands"
+      , "- Fetching Hackage pages with curl/w3m"
+      , ""
+      , "AVAILABLE TOOLS:"
+      , "- search: Find functions by name, keyword, or type signature (e.g. \"map\", \"[a] -> Int\")"
+      , "- search_type: Search specifically by type signature"
+      , "- lookup_module: Browse all exports of a module (e.g. \"Data.Map\")"
+      , "- regenerate_database: Re-index packages. Pass ghcBinPath (find it with: nix-shell --run 'dirname $(which ghc-pkg)')"
+      , "- reload_database: Reload database from disk after generating externally"
+      , ""
+      , "DATABASE SETUP:"
+      , "If searches return 'No database loaded', call regenerate_database with"
+      , "the ghcBinPath from the project's nix-shell. Find it by running:"
+      , "  nix-shell --run 'dirname $(which ghc-pkg)'"
+      , "Then pass that path to regenerate_database."
+      , "Alternatively, run `nix-shell --run 'mcp-hoogle generate'` as a bash"
+      , "command, then call reload_database to pick up the new file."
+      ]
+  }
 
-    runMcpServerStdio serverInfo handlers
+-- | Build MCP handlers from a database ref.
+handlers :: IORef (Maybe Hoogle.Database) -> McpServerHandlers IO
+handlers databaseRef = McpServerHandlers
+  { prompts = Nothing
+  , resources = Nothing
+  , tools = Just $(deriveToolHandlerWithDescription ''HoogleTool 'toolHandler toolDescriptions)
+  }
+  where
+    toolHandler :: HoogleTool -> IO Content
+    toolHandler tool = ContentText <$> handleTool databaseRef tool

@@ -111,10 +111,10 @@ hoogleSearchTests getDbPath = testGroup "Hoogle search integration"
   ]
 
 -- | Load a hoogle database and run an action with it
-withHoogleDb :: FilePath -> (IORef Database -> IO ()) -> IO ()
+withHoogleDb :: FilePath -> (IORef (Maybe Database) -> IO ()) -> IO ()
 withHoogleDb path action =
   withDatabase path $ \database -> do
-    databaseRef <- newIORef database
+    databaseRef <- newIORef (Just database)
     action databaseRef
 
 -- | Helper to create a Target for testing
