@@ -29,6 +29,8 @@ import MCP.Server.Types
 import MCP.Server.Derive (deriveToolHandlerWithDescription)
 import McpHoogle.Tools (HoogleTool(..), handleTool, toolDescriptions)
 import System.Directory (doesFileExist)
+import Data.Version (showVersion)
+import Paths_mcp_hoogle (version)
 
 -- | Run the MCP server using the default Hoogle database location
 -- (@~\/.hoogle\/default-haskell-*.hoo@).
@@ -68,7 +70,7 @@ runServerEmpty = do
 serverInfo :: McpServerInfo
 serverInfo = McpServerInfo
   { serverName = "mcp-hoogle"
-  , serverVersion = "0.1.0"
+  , serverVersion = Text.pack (showVersion version)
   , serverInstructions = Text.unlines
       [ "Hoogle search for Haskell types, functions, and modules."
       , ""

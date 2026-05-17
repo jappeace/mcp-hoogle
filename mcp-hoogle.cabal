@@ -1,7 +1,7 @@
 cabal-version:      3.0
 
 name:           mcp-hoogle
-version:        0.1.0
+version:        0.2.0
 synopsis:       MCP server exposing Hoogle search over local project dependencies
 description:    An MCP (Model Context Protocol) server that exposes Hoogle search
                 over your project's local Haskell dependencies. Run from within a
@@ -77,6 +77,10 @@ library
       McpHoogle
       McpHoogle.Tools
       McpHoogle.Format
+  autogen-modules:
+      Paths_mcp_hoogle
+  other-modules:
+      Paths_mcp_hoogle
   hs-source-dirs:
       src
   build-depends:
@@ -90,6 +94,10 @@ executable mcp-hoogle
   main-is: Main.hs
   hs-source-dirs:
       app
+  autogen-modules:
+      Paths_mcp_hoogle
+  other-modules:
+      Paths_mcp_hoogle
   build-depends:
       mcp-hoogle
     , hoogle >=5.0 && <5.1
